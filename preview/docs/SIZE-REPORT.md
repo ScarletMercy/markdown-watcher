@@ -3,6 +3,8 @@
 > Unit 5 / Plan Task 9. Measured on `phase-0` with `highlight.js@11.11.1`, `katex@0.17.0`,
 > `markdown-it@14.2.0`, esbuild minified IIFE build.
 
+**Measured at Unit 5, 2026-06** on `phase-0` (commit `b729120`).
+
 ## Budget (design §4)
 
 - Total gzip assets **≤ 600 KB**.
@@ -17,7 +19,18 @@
 | highlight github theme css | 1.3 | 0.6 |
 | themes light.css | 0.9 | 0.5 |
 
-**TOTAL gzip ≈ 520.4 KB** (excludes mermaid, loaded lazily)
+**TOTAL raw ≈ 1768.2 KB | TOTAL gzip ≈ 520.4 KB** (excludes mermaid, loaded lazily)
+
+> **KaTeX web fonts (not summed above):** `katex.min.css` references ~60
+> woff2/woff/ttf files under `node_modules/katex/dist/fonts/`. They are fetched by
+> the browser on a page that renders math. They are omitted from the 520 KB total
+> because they are individually small and only the per-glyph subsets a page
+> actually uses are requested — but they are real network weight and should be
+> accounted for honestly when comparing against the budget.
+
+> **Measurement caveat:** gzip figures use Node `zlib` (default level ~6). Real-world
+> CDN transfer (gzip level 4–6, or Brotli) may differ by ~5–10%, so do not over-read
+> precision into the 520.4 KB figure — treat it as ±a few percent.
 
 ## Verdict
 
