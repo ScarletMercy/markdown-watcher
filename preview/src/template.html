@@ -12,7 +12,10 @@
   <!-- bundle -->
   <script src="preview.js"></script>
   <script>
-    // mermaid loaded lazily on first mermaid block (design §4)
+    // mermaid loaded lazily on first mermaid block (design §4).
+    // NOTE (M5): mermaid is a deploy-time asset served by Flutter from
+    // assets/preview/mermaid/; it is NOT bundled by esbuild. `npm run build`
+    // does not produce a standalone working preview without it.
     let mermaidReady = null;
     async function ensureMermaid() {
       if (!mermaidReady) {
@@ -25,26 +28,36 @@
     }
     const cache = new Map();
     async function __render__(text, theme) {
-      document.documentElement.setAttribute('data-theme', theme || 'light');
+      const t = (theme === 'dark') ? 'dark' : 'light';   // Fix 4 (M4): validate theme
+      document.documentElement.setAttribute('data-theme', t);
       document.getElementById('content').innerHTML = window.renderMarkdown(text);
-      // mermaid blocks
       const nodes = document.querySelectorAll('div.mermaid');
-      if (nodes.length) {
-        const mermaid = await ensureMermaid();
-        nodes.forEach((n, i) => {
-          if (window.shouldRender('m' + i, n.textContent, cache)) {
-            n.removeAttribute('data-processed');
-          }
-        });
-        await mermaid.run({ nodes: Array.from(nodes) });
+      try {
+        if (nodes.length) {
+          const mermaid = await ensureMermaid();
+          // NOTE (I2): under the current full-innerHTML-replace strategy every .mermaid node
+          // is brand-new each render (no data-processed), so mermaid.run renders it regardless
+          // of shouldRender(). shouldRender()/the source-hash cache only becomes load-bearing
+          // if/when rendering switches to incremental DOM updates. Kept for that future path.
+          nodes.forEach((n, i) => {
+            if (window.shouldRender('m' + i, n.textContent, cache)) n.removeAttribute('data-processed');
+          });
+          await mermaid.run({ nodes: Array.from(nodes) });
+        }
+      } catch (e) {
+        console.error('mermaid render failed:', e);
+      } finally {
+        // Fix 1 (I3): always notify Flutter, with or without mermaid success
+        if (window.__renderDone__) window.__renderDone__(collectOutline());
       }
-      // notify Flutter: render complete + outline
-      window.__renderDone__ && window.__renderDone__(collectOutline());
     }
     function collectOutline() {
       return Array.from(document.querySelectorAll('h1,h2,h3'))
-        .map(h => ({ level: +h.tagName[1], text: h.textContent, line: +h.getAttribute('data-source-line') }));
+        .map(h => ({ level: +h.tagName[1], text: h.textContent,
+          line: h.hasAttribute('data-source-line') ? +h.getAttribute('data-source-line') : null }));
     }
+    // Fix 3 (M3): explicit global assignment (module-safe)
+    window.__render__ = __render__;
   </script>
 </body>
 </html>
