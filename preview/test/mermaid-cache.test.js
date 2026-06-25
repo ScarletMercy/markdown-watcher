@@ -9,6 +9,16 @@ test('mermaid fence becomes a mermaid div', () => {
   assert.match(html, /<div class="mermaid"[^>]*>graph TD; A--&gt;B<\/div>/);
 });
 
+test('mermaid content with a triple-backtick line stays in one block', () => {
+  const html = renderMarkdown('```mermaid\nA\n```js\nB\n```\n');
+  assert.match(html, /<div class="mermaid"[^>]*>A\n```js\nB<\/div>/);
+});
+
+test('tilde ~~~mermaid fence is supported', () => {
+  const html = renderMarkdown('~~~mermaid\ngraph TD; A-->B\n~~~\n');
+  assert.match(html, /<div class="mermaid"[^>]*>graph TD; A--&gt;B<\/div>/);
+});
+
 test('cache skips unchanged source, renders changed', () => {
   const cache = new Map();
   assert.equal(shouldRender('id1', 'same', cache), true);   // first time

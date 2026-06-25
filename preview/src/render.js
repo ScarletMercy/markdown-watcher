@@ -30,31 +30,69 @@ const md = new MarkdownIt({
 // not here in Node — see the HTML template (later unit). Registered BEFORE the
 // default `fence` rule so non-mermaid fences (```js, …) still fall through to
 // the default fence rule and get hljs highlighting.
+// Mirrors markdown-it's `fence` rule (node_modules/markdown-it/lib/rules_block/
+// fence.mjs) for opening detection, indentation guard, and closing-scan logic,
+// but restricted to the `mermaid` info string. Supports both ``` and ~~~ fences
+// symmetrically (CommonMark). Non-mermaid fences fall through to the default
+// `fence` rule (registered after this one) for hljs highlighting.
 md.block.ruler.before('fence', 'mermaid_fence', (state, startLine, endLine, silent) => {
+  // Indentation guard: lines indented >= 4 spaces are indented code blocks.
+  if (state.sCount[startLine] - state.blkIndent >= 4) return false;
+
   const start = state.bMarks[startLine] + state.tShift[startLine];
-  const marker = state.src.slice(start, start + 3);
-  if (marker !== '```') return false;
-  // info string after the fence
-  let pos = start + 3;
-  const langStart = pos;
-  while (pos < state.eMarks[startLine] && state.src.charCodeAt(pos) !== 0x20 /*space*/) pos++;
-  const lang = state.src.slice(langStart, pos).trim();
-  if (lang !== 'mermaid') return false;
+  const lineMax = state.eMarks[startLine];
+  const markerCharCode = state.src.charCodeAt(start);
+  // Opening marker must be a run of backticks or tildes.
+  if (markerCharCode !== 0x60 /* ` */ && markerCharCode !== 0x7E /* ~ */) return false;
+
+  // Scan the marker run length.
+  let pos = start;
+  while (pos < lineMax && state.src.charCodeAt(pos) === markerCharCode) pos++;
+  const markerLen = pos - start;
+  if (markerLen < 3) return false;
+  const markup = state.src.slice(start, pos);
+
+  // Info string = rest of the opening line. For backtick fences, markdown-it
+  // rejects a backtick in the info string (unterminated inline code); mirror that.
+  const params = state.src.slice(pos, lineMax);
+  if (markerCharCode === 0x60 && params.indexOf('`') >= 0) return false;
+
+  if (params.trim() !== 'mermaid') return false;
+
   if (silent) return true;
-  // collect until a closing fence of at least 3 backticks
-  let nextLine = startLine + 1;
-  while (nextLine < endLine) {
-    const ls = state.bMarks[nextLine] + state.tShift[nextLine];
-    if (state.src.slice(ls, ls + 3) === '```') break;
+
+  // Scan for the closing fence, mirroring markdown-it/fence.mjs: a closing
+  // fence is a run of the same marker (length >= opening) followed by
+  // whitespace-only to end-of-line. This avoids splitting on a triple-backtick
+  // line that is mermaid *content* (e.g. code in node text).
+  let nextLine = startLine;
+  let haveEnd = false;
+  while (true) {
     nextLine++;
+    if (nextLine >= endLine) break; // EOF / end of parent: autoclose
+    let ls = state.bMarks[nextLine] + state.tShift[nextLine];
+    const lm = state.eMarks[nextLine];
+    // Closing fence cannot be indented >= 4 spaces.
+    if (state.sCount[nextLine] - state.blkIndent >= 4) continue;
+    if (state.src.charCodeAt(ls) !== markerCharCode) continue;
+    // Run of the same marker at least as long as the opening run.
+    let p = ls;
+    while (p < lm && state.src.charCodeAt(p) === markerCharCode) p++;
+    if (p - ls < markerLen) continue;
+    // Rest of line must be whitespace-only to count as a closing fence.
+    while (p < lm && (state.src.charCodeAt(p) === 0x20 || state.src.charCodeAt(p) === 0x09)) p++;
+    if (p === lm) { haveEnd = true; break; }
   }
+
   const content = state.getLines(startLine + 1, nextLine, state.tShift[startLine], false).trim();
   const token = state.push('mermaid', 'div', 0);
   token.content = content;
   token.map = [startLine, nextLine];
-  token.markup = '```';
+  token.markup = markup;
   token.info = 'mermaid';
-  state.line = nextLine + 1;
+  // Only advance past the closing marker line if one was actually found;
+  // otherwise an unclosed fence at EOF would overshoot state.line by 1.
+  state.line = nextLine + (haveEnd ? 1 : 0);
   return true;
 }, { alt: [] });
 
