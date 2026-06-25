@@ -27,12 +27,20 @@ const md = new MarkdownIt({
 
 // Tag every opening block token with the source line it came from, so the
 // Flutter WebView can map DOM nodes back to markdown offsets for scroll-sync.
-// Chained BEFORE anchor's heading rule so the attr lands on the real <hN>
-// open token rather than a synthetic one.
+// Chained before `anchor` for determinism; both rules `attrSet` on the same
+// `heading_open` token and neither splices block tokens, so order does not
+// currently affect output.
 //
 // Known limitation: only block-level tokens have a `map`; inline tokens and
 // the implicit <p> tokens of tight lists have no map and are skipped.
 // Block-level anchors are sufficient for scroll-sync purposes.
+//
+// Known limitation: fenced code blocks currently get NO `data-source-line`.
+// The custom `highlight` callback above returns raw HTML (a fully-rendered
+// `<pre><code>...</code></pre>` string) instead of producing a `fence_open`
+// token with a `map` to tag, so the source-line ruler has nothing to annotate.
+// Fixing this requires a fence-renderer-level change and is tracked for a
+// later unit; it affects scroll-sync coverage of code blocks.
 md.core.ruler.before('anchor', 'source_lines', (state) => {
   for (const tok of state.tokens) {
     if (tok.map && tok.nesting === 1) {

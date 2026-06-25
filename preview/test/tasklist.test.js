@@ -18,3 +18,15 @@ test('checkbox marker text is removed', () => {
   const html = renderMarkdown('- [x] done\n');
   assert.doesNotMatch(html, /\[x\]/);
 });
+
+test('task with bare URL preserves the link', () => {
+  const html = renderMarkdown('- [ ] see https://example.com now\n');
+  assert.match(html, /<a href="https:\/\/example\.com">/);
+  assert.match(html, /now<\/li>/);
+});
+
+test('task with HTML entity is preserved', () => {
+  const html = renderMarkdown('- [ ] a &amp; b\n');
+  assert.match(html, /a.*b<\/li>/s);
+  assert.match(html, /&amp;/);
+});

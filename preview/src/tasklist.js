@@ -8,6 +8,13 @@
 //
 // Limitation: only the first line of a list item is treated as the task label
 // (matching GitHub). The marker must be the very first inline content.
+//
+// Divergence from GFM: GitHub restricts task lists to unordered lists
+// (`- [ ]`/`* [ ]`), but this rule does NOT check the enclosing list type, so
+// ordered-list items (`1. [ ] ...`) are also treated as tasks. This is
+// intentional for our preview use case; tighten to unordered-only by checking
+// the preceding `bullet_list_open` vs `ordered_list_open` if GFM parity is
+// required.
 
 const MARKER = /^\[([ xX])\][ \t]+/;
 
@@ -35,18 +42,14 @@ export default function taskList(md) {
 
       const checked = m[1].toLowerCase() === 'x';
 
-      // Rewrite the first text token's content, then re-tokenize the entire
-      // inline run so downstream rules (smartquotes, etc.) see the cleaned
-      // text rather than stale children.
-      const remaining = firstText.content.slice(m[0].length);
-      // Re-tokenize the stripped text IN PLACE: markdown-it's inline.parse
-      // populates the destination array it is given (it does not return one),
-      // and downstream core rules (text_join, smartquotes, ...) hold the
-      // existing `children` reference, so we must mutate it rather than
-      // replace it. Clear then refill.
-      t[i].children.length = 0;
-      md.inline.parse(remaining, state.md, state.env, t[i].children);
-      t[i].content = remaining;
+      // Slice the marker off the first text token IN PLACE. Do NOT re-tokenize:
+      // markdown-it already split the inline run into the correct children
+      // (text, link_open/text/link_close for linkified URLs, etc.), and
+      // re-parsing only firstText.content would silently drop every later
+      // child (e.g. a URL linkify split off, or an entity/code-span fragment).
+      // We also strip the marker from the inline token's aggregate `content`.
+      firstText.content = firstText.content.slice(m[0].length);
+      t[i].content = (t[i].content || '').replace(MARKER, '');
 
       // Tag the list_item_open token (grandparent of inline for loose lists,
       // parent for tight). attrSet is idempotent.
