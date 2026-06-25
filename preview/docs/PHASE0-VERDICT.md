@@ -8,7 +8,7 @@
 A standalone, fully-testable JS preview bundle under `preview/` that renders markdown → HTML via markdown-it + KaTeX + highlight.js + Mermaid passthrough. It is the foundation for the Flutter WebView preview (will be copied verbatim into `assets/preview/`).
 
 - `src/render.js` — markdown-it pipeline (texmath/KaTeX, footnote, anchor, hand-written task lists, data-source-line anchors, mermaid fence passthrough), `html:false`.
-- `src/mermaid-cache.js` — source-hash cache deciding whether to (re)render a mermaid block.
+- `src/mermaid-cache.js` — source-hash cache deciding whether to (re)render a mermaid block. **Note:** currently *inert* at runtime — under the full-`innerHTML`-replace strategy every mermaid node is brand-new each render (no `data-processed`), so `mermaid.run` renders regardless and `shouldRender()`'s gate is a no-op. It is a **Phase 2 hook** kept for a future incremental-DOM path, not an active optimization. Documented honestly in `template.html` and `mermaid-cache.js`.
 - `src/template.html` — WebView shell: `window.__render__(text, theme)`, lazy in-browser mermaid import, `__renderDone__` completion handshake, outline callback.
 - `src/themes/light.css` — typography-first theme (light + `data-theme="dark"` override).
 - `src/entry.js` + `esbuild.config.js` — IIFE bundle → `dist/preview.js`.
@@ -47,6 +47,9 @@ These need a Mac (iOS) / Android device and the Flutter scaffold — out of reac
 
 ## Recommended next actions
 
-1. Run the visual golden on an unrestricted machine: `node node_modules/playwright-core/cli.js install chromium && UPDATE_GOLDENS=1 npm run test:e2e` — then eyeball the screenshots (the qualitative top-tier gate).
-2. Optional headroom: switch `highlight.js` → `highlight.js/lib/common` + on-demand `registerLanguage` (cuts ~255 KB gzip to ~265 KB total); add a test guarding against accidental full re-import.
-3. Start Phase 0b: Flutter scaffold + `WebViewRenderer` integration + execute the device runbook.
+1. **Run the visual golden on an unrestricted machine:** `node node_modules/playwright-core/cli.js install chromium && UPDATE_GOLDENS=1 npm run test:e2e` — then eyeball the screenshots (the qualitative top-tier gate). This is the only unrun gate; the setup + structural fallback are verified correct.
+2. **Vendor Mermaid ESM + probe iOS first (生死):** before Phase 0b integration, vendor `mermaid@11.15.0` (incl. worker chunks) and confirm its dynamic `import()` resolves under iOS WKWebView `file://`/CSP. See `PHASE0-DEVICE-RUNBOOK.md`. This is the single biggest unverified risk.
+3. **Bundle-global smoke test (untested seam):** `node:test` imports `render.js` directly, bypassing the esbuild IIFE bundle — so `dist/preview.js`'s `window.renderMarkdown`/`window.shouldRender` global exposure is currently unverified by any automated test (confirmed correct only by reading the bundle tail). Add a `node:vm`/window-shim smoke test that loads the built bundle and asserts the globals are functions.
+4. **Optional headroom:** switch `highlight.js` → `highlight.js/lib/common` + on-demand `registerLanguage` (cuts ~255 KB gzip to ~265 KB total); add a test guarding against accidental full re-import. The ~80 KB headroom is thin — do this before adding any new dependency.
+5. **Minor polish:** style texmath's non-standard `<eq>` wrapper in `light.css`; note that `collectOutline` intentionally returns only h1–h3 (design §4 said H1–H6) as an MVP narrowing; add a CI guard that `dist/preview.js` is fresh vs `src/`.
+6. **Start Phase 0b:** Flutter scaffold + `WebViewRenderer` integration + execute the device runbook.

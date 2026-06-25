@@ -4,6 +4,10 @@
 
 Prerequisite: the Flutter scaffold + `WebViewRenderer` integration (next plan, "Phase 0b"). The `preview/` bundle produced here is copied into `assets/preview/` (including `dist/preview.js`, `src/template.html`, `src/themes/light.css`, the katex/hljs CSS, and a vendored `mermaid/mermaid.esm.min.mjs`).
 
+> ⚠️ **Phase 0b prerequisite — vendor Mermaid ESM explicitly (tracked, not a parenthetical).** `template.html` does `import('./mermaid/mermaid.esm.min.mjs')` but `src/mermaid/` does **not** exist in this repo (it's a deploy-time asset). Phase 0b must: vendor `mermaid@11.15.0` ESM into `assets/preview/mermaid/` **including its dynamically-imported worker chunks** (mermaid 11 pulls these at runtime), pin the version, and add a check that the import resolves. Because the Playwright golden never ran (browser binary blocked), this import path is **completely unexercised** — see P0(a) below.
+
+> ⚠️ **The FIRST P0(a) probe must be Mermaid under iOS WKWebView `file://`.** Mermaid 11's dynamic `import()` of worker chunks may not resolve under `flutter_inappwebview`'s asset scheme / CSP. This is an **unverified生死 risk** hiding in a one-line `import()`. Probe it before investing in the rest of the integration. If it fails, the fallback (eager-bundle mermaid via esbuild, or render mermaid Node-side with a DOM shim) changes the architecture.
+
 ---
 
 ## P0(a) — iOS real-device WebView render生死  ⚠️ HIGHEST PRIORITY
