@@ -22,7 +22,10 @@ async function render(page, theme) {
     window.__lastRenderDone = false;
   });
   await page.goto(BASE);
-  // Re-arm in case navigation reset the flag.
+  // Defensive no-op: addInitScript above re-runs on every navigation and
+  // re-initializes __lastRenderDone, so this explicit re-arm is redundant.
+  // Kept intentionally as a guard against any future code path that navigates
+  // without re-running the init script.
   await page.evaluate(() => { window.__lastRenderDone = false; });
   await page.evaluate(
     ([t, th]) => window.__render__(t, th),
@@ -39,7 +42,20 @@ test('light theme renders top-tier', async ({ page }) => {
 });
 
 test('dark theme renders top-tier', async ({ page }) => {
-  // Only light.css ships; dark still flips data-theme=dark on <html>.
+  // IMPORTANT — what this golden does and does NOT prove:
+  //
+  // Only `themes/light.css` ships. There is no separate `dark.css`; "dark mode"
+  // is achieved purely via the `data-theme="dark"` attribute override block
+  // inside light.css. That override produces a visibly different pixel result
+  // from the light golden, so this screenshot is useful as a REGRESSION ANCHOR:
+  // it catches unintended pixel drift in the dark-attribute branch.
+  //
+  // It is NOT a proof that a distinct, fully-realized dark theme renders
+  // correctly. A real dark-theme visual proof would require either a dedicated
+  // dark stylesheet or explicit assertions over a dark color palette
+  // (background/foreground/accent) rather than a single whole-page snapshot.
+  // If dark.css is ever introduced, replace this anchor with targeted
+  // dark-palette assertions.
   await render(page, 'dark');
   await expect(page).toHaveScreenshot('dark.png', { maxDiffPixelRatio: 0.01 });
 });
