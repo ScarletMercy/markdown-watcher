@@ -1,0 +1,45 @@
+# --- Flutter / Dart ---
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+.fvm/
+coverage/
+*.dart_tool
+
+# Flutter generated
+**/generated_plugin_registrant.dart
+
+# --- IDE ---
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+
+# --- Node (JS preview bundle build) ---
+node_modules/
+npm-debug.log*
+yarn-error.log*
+dist/
+.parcel-cache/
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Secrets / local ---
+.env
+.env.local
+*.keystore
+*.jks
+
+# --- Misc ---
+*.log
