@@ -1,0 +1,15 @@
+/* preview/src/themes/light.css */
+:root { --fg:#1f2328; --bg:#ffffff; --code-bg:#f6f8fa; --link:#0969da; }
+html[data-theme="dark"] { --fg:#e6edf3; --bg:#0d1117; --code-bg:#161b22; --link:#58a6ff; }
+body { margin:0; padding:16px; background:var(--bg); color:var(--fg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  line-height:1.6; font-size:16px; -webkit-font-smoothing:antialiased; }
+article { max-width:720px; margin:0 auto; }
+h1,h2,h3 { line-height:1.25; margin:1.4em 0 .5em; }
+a { color:var(--link); }
+pre.hljs { background:var(--code-bg); padding:12px; border-radius:8px; overflow:auto; }
+code { font-family:"SFMono-Regular",ui-monospace,monospace; }
+pre code { background:none; }
+img { max-width:100%; height:auto; border-radius:8px; }
+blockquote { border-left:3px solid var(--code-bg); margin:0; padding-left:1em; opacity:.85; }
+table { border-collapse:collapse; } th,td { border:1px solid var(--code-bg); padding:6px 12px; }
