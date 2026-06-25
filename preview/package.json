@@ -1,0 +1,24 @@
+{
+  "name": "markdown-watcher-preview",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/",
+    "test:e2e": "playwright test",
+    "build": "node esbuild.config.js",
+    "size": "node scripts/measure-size.js"
+  },
+  "dependencies": {
+    "highlight.js": "11.11.1",
+    "katex": "0.17.0",
+    "markdown-it": "14.2.0",
+    "markdown-it-anchor": "9.2.0",
+    "markdown-it-footnote": "4.0.0",
+    "markdown-it-texmath": "1.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.23.0",
+    "@playwright/test": "^1.48.0"
+  }
+}
