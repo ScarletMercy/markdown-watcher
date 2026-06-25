@@ -6,7 +6,7 @@
 #
 # Idempotent: wipes and recreates the asset dirs before copying.
 # Run from repo root:  bash app/scripts/sync-preview-assets.sh
-set -e
+set -euo pipefail
 
 # Resolve repo root from this script's location (app/scripts/).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,6 +19,8 @@ echo ">> Repo root: $REPO_ROOT"
 echo ">> Assets dir: $ASSETS_DIR"
 
 # --- Step 1: build the preview bundle (produces preview/dist/preview.js) ---
+command -v npm >/dev/null 2>&1 || { echo "ERROR: npm not found on PATH" >&2; exit 1; }
+[ -d "$PREVIEW_DIR/node_modules" ] || { echo "ERROR: $PREVIEW_DIR/node_modules missing — run 'npm ci' in preview/ first" >&2; exit 1; }
 echo ">> Building preview bundle..."
 cd "$PREVIEW_DIR"
 npm run build
@@ -48,6 +50,8 @@ cp "$PREVIEW_DIR/src/themes/light.css" "$ASSETS_DIR/themes/light.css"
 # katex.min.css + its fonts (css references fonts/* as siblings)
 cp "$PREVIEW_DIR/node_modules/katex/dist/katex.min.css" "$ASSETS_DIR/katex/katex.min.css"
 cp "$PREVIEW_DIR"/node_modules/katex/dist/fonts/* "$ASSETS_DIR/katex/fonts/"
+_font_count=$(find "$ASSETS_DIR/katex/fonts" -type f | wc -l)
+[ "$_font_count" -ge 20 ] || { echo "ERROR: expected ~60 katex fonts, got $_font_count — katex layout may have changed" >&2; exit 1; }
 
 # highlight.js github theme
 cp "$PREVIEW_DIR/node_modules/highlight.js/styles/github.min.css" \
@@ -61,6 +65,8 @@ cp "$PREVIEW_DIR/node_modules/mermaid/dist/mermaid.esm.min.mjs" \
    "$ASSETS_DIR/mermaid/mermaid.esm.min.mjs"
 cp "$PREVIEW_DIR"/node_modules/mermaid/dist/chunks/mermaid.esm.min/*.mjs \
    "$ASSETS_DIR/mermaid/chunks/mermaid.esm.min/"
+_chunk_count=$(find "$ASSETS_DIR/mermaid/chunks/mermaid.esm.min" -type f | wc -l)
+[ "$_chunk_count" -ge 20 ] || { echo "ERROR: expected ~81 mermaid chunks, got $_chunk_count — mermaid layout may have changed" >&2; exit 1; }
 
 # --- Step 4: KaTeX font url() sanity check ---
 echo ">> KaTeX font url() check (expect: url(fonts/...) ):"
