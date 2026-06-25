@@ -23,6 +23,22 @@ const md = new MarkdownIt({
   .use(footnote)
   .use(anchor, { permalink: anchor.permalink.headerLink() });
 
+// Tag every opening block token with the source line it came from, so the
+// Flutter WebView can map DOM nodes back to markdown offsets for scroll-sync.
+// Chained BEFORE anchor's heading rule so the attr lands on the real <hN>
+// open token rather than a synthetic one.
+//
+// Known limitation: only block-level tokens have a `map`; inline tokens and
+// the implicit <p> tokens of tight lists have no map and are skipped.
+// Block-level anchors are sufficient for scroll-sync purposes.
+md.core.ruler.before('anchor', 'source_lines', (state) => {
+  for (const tok of state.tokens) {
+    if (tok.map && tok.nesting === 1) {
+      tok.attrSet('data-source-line', String(tok.map[0]));
+    }
+  }
+});
+
 export function renderMarkdown(text) {
   return md.render(text);
 }

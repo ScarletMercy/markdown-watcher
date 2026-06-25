@@ -10,8 +10,8 @@ test('heading + paragraph + bold', () => {
 
 test('unordered + ordered list', () => {
   const html = renderMarkdown('- a\n- b\n\n1. x\n2. y\n');
-  assert.match(html, /<ul>/);
-  assert.match(html, /<ol>/);
+  assert.match(html, /<ul[^>]*>/);
+  assert.match(html, /<ol[^>]*>/);
 });
 
 test('link + code span', () => {
@@ -21,5 +21,5 @@ test('link + code span', () => {
 });
 
 test('blockquote', () => {
-  assert.match(renderMarkdown('> quoted\n'), /<blockquote>/);
+  assert.match(renderMarkdown('> quoted\n'), /<blockquote[^>]*>/);
 });
