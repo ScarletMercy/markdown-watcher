@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test",
     "test:e2e": "playwright test",
     "build": "node esbuild.config.js",
     "size": "node scripts/measure-size.js"
@@ -18,7 +18,7 @@
     "markdown-it-texmath": "1.0.0"
   },
   "devDependencies": {
-    "esbuild": "^0.23.0",
-    "@playwright/test": "^1.48.0"
+    "@playwright/test": "^1.48.0",
+    "esbuild": "^0.23.0"
   }
 }
