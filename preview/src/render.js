@@ -4,6 +4,7 @@ import anchor from 'markdown-it-anchor';
 import texmath from 'markdown-it-texmath';
 import katex from 'katex';
 import hljs from 'highlight.js';
+import taskList from './tasklist.js';
 
 const md = new MarkdownIt({
   html: false,        // SECURITY: no raw HTML (design §7)
@@ -21,7 +22,8 @@ const md = new MarkdownIt({
 })
   .use(texmath, { engine: katex, delimiters: 'dollars' })
   .use(footnote)
-  .use(anchor, { permalink: anchor.permalink.headerLink() });
+  .use(anchor, { permalink: anchor.permalink.headerLink() })
+  .use(taskList);
 
 // Tag every opening block token with the source line it came from, so the
 // Flutter WebView can map DOM nodes back to markdown offsets for scroll-sync.
