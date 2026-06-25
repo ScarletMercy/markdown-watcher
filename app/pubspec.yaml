@@ -1,0 +1,39 @@
+name: markdown_watcher
+description: Top-tier mobile Markdown editor — Phase 0b rendering probe
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.6.0
+  flutter: ">=3.27.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_inappwebview: ^6.1.5
+  flutter_riverpod: ^3.3.2
+  # NOTE: riverpod core (flutter_riverpod/riverpod) is at 3.x, but the
+  # annotation/codegen packages jumped to 4.x. 4.0.3 / 4.0.4 are the versions
+  # that depend on riverpod 3.3.2, matching flutter_riverpod 3.3.2.
+  riverpod_annotation: ^4.0.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  riverpod_generator: ^4.0.4
+  build_runner: ^2.4.0
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/preview/
+    - assets/preview/mermaid/
+    - assets/preview/mermaid/chunks/mermaid.esm.min/
+    - assets/preview/themes/
+    - assets/preview/katex/
+    - assets/preview/katex/fonts/
+    - assets/preview/highlight/
+    - assets/preview/highlight/styles/
