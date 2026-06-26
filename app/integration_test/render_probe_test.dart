@@ -27,8 +27,8 @@ void main() {
     String text = '';
     for (var i = 0; i < 60 && !text.startsWith('RENDER_DONE'); i++) {
       await tester.pump(const Duration(milliseconds: 500));
-      final widget = tester.widget<Text>(statusFinder);
-      text = widget.data ?? '';
+      final widget = tester.widget(statusFinder);
+      text = widget is Text ? (widget.data ?? '') : '';
     }
 
     expect(

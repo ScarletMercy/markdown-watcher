@@ -72,3 +72,10 @@ Prerequisite: the Flutter scaffold + `WebViewRenderer` integration (next plan, "
 ## Notes
 - The JS-bundle spine built here (29 tests, gzip within budget, injection-safe) is the **rendering half** of P0(a) and the entirety of P0(d)'s bundle size — both already verified. This runbook covers the **device** halves that need hardware.
 - Run the **visual golden** (`UPDATE_GOLDENS=1 npm run test:e2e` after `playwright install chromium`) on an unrestricted machine as the qualitative top-tier gate before claiming P0(a) fully passed.
+
+## CI verification (`.github/workflows/verify.yml` — Phase 0b)
+
+The生死 checks P0(a)/(d) are automated in GitHub Actions: `analyze-and-unit-test` (ubuntu), `android-render` (ubuntu + Android emulator), `ios-render` (macos-14 + iOS simulator). The `render_probe_test.dart` integration_test asserts hljs / KaTeX / Mermaid-SVG counts > 0 in the real WebView. **Diagnosing the first red iOS run:**
+- **All three counts 0 on iOS** → the preview bundle didn't load at all (the `asset:///` scheme + relative `<script src="preview.js">` failed under iOS WKWebView). Fallback: `InAppLocalhostServer(documentRoot: 'assets')` + an `http://localhost:8080/...` URL.
+- **Only `mermaidSvg` is 0** (hljs + katex pass) → exactly the flagged risk: Mermaid's dynamic worker `import()` of `./chunks/*.mjs` failed under iOS `file://`. Fallback: eager-bundle mermaid via esbuild, or Node-side render with a DOM shim.
+- **Android green, iOS red** → iOS-specific (WKWebView asset scheme / file://), not a shared bug.
