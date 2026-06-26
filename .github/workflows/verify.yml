@@ -87,6 +87,12 @@ jobs:
         run: |
           find ~/.pub-cache -path "*flutter_inappwebview_android*/android/build.gradle" \
             -exec sed -i "s/getDefaultProguardFile('proguard-android.txt')/getDefaultProguardFile('proguard-android-optimize.txt')/g" {} \;
+      # InAppLocalhostServer serves over http://localhost:8080; Android 9+ blocks
+      # cleartext HTTP by default (incl. loopback) — allow it for the probe app.
+      - name: Allow cleartext to localhost (InAppLocalhostServer)
+        run: |
+          sed -i 's|<application|<application android:usesCleartextTraffic="true"|' \
+            app/android/app/src/main/AndroidManifest.xml
       # Grant KVM access — without it the emulator falls back to software
       # emulation and never boots (x86_64 too slow). Standard fix for
       # reactivecircus/android-emulator-runner on ubuntu runners.
