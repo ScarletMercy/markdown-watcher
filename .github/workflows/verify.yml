@@ -109,6 +109,12 @@ jobs:
           target: google_apis
           emulator-boot-timeout: 1200
           script: cd $GITHUB_WORKSPACE/app && flutter test integration_test/render_probe_test.dart
+      # The APK built during the emulator test is x86_64-only (matches the
+      # emulator) — real phones are arm64 and reject it ("system incompatible").
+      # Rebuild a fat debug APK (arm + arm64 + x64) for sideloading.
+      - name: Build debug APK for real devices (all ABIs)
+        if: always()
+        run: cd app && flutter build apk --debug
       - name: Upload debug APK
         if: always()
         uses: actions/upload-artifact@v4
