@@ -19,21 +19,23 @@ void main() {
 
   testWidgets('WebView renders code + KaTeX + Mermaid', (tester) async {
     await tester.pumpWidget(const MyApp());
-    await tester.pumpAndSettle(const Duration(seconds: 3));
-
-    // Poll (up to ~30s) for the status line to flip to RENDER_DONE with counts.
-    // Mermaid lazy-imports its chunks + renders async, so give it room.
     final statusFinder = find.byKey(const Key('status'));
-    String text = '';
-    for (var i = 0; i < 60 && !text.startsWith('RENDER_DONE'); i++) {
+
+    // Poll up to ~45s for the status line to flip to RENDER_DONE with counts.
+    // IMPORTANT: use pump(), NOT pumpAndSettle() — InAppWebView continuously
+    // schedules frames, so pumpAndSettle never settles and throws a timeout
+    // (which crashes the test opaquely before any diagnostic prints).
+    String text = 'loading';
+    for (var i = 0; i < 90 && !text.startsWith('RENDER_DONE'); i++) {
       await tester.pump(const Duration(milliseconds: 500));
-      final widget = tester.widget(statusFinder);
-      text = widget is Text ? (widget.data ?? '') : '';
+      if (statusFinder.evaluate().isNotEmpty) {
+        final widget = tester.widget(statusFinder);
+        text = widget is Text ? (widget.data ?? '') : '';
+      }
     }
 
-    // Dump the final status (and the probe's diagnostic trail is already
-    // debugPrint'd by the probe) so the CI log shows exactly what happened
-    // even if GitHub Actions collapses the assertion detail.
+    // Always print the final status so the CI log shows exactly what happened
+    // (the probe also debugPrints a [probe] trail: loadstop/console/renderdone).
     debugPrint('[test] FINAL STATUS: "$text"');
 
     expect(
@@ -46,13 +48,13 @@ void main() {
     final hljs = int.parse(RegExp(r'hljs=(\d+)').firstMatch(text)!.group(1)!);
     final katex = int.parse(RegExp(r'katex=(\d+)').firstMatch(text)!.group(1)!);
 
-    expect(hljs, greaterThan(0), reason: 'Code not highlighted (hljs missing in DOM)');
-    expect(katex, greaterThan(0), reason: 'KaTeX math not rendered (.katex missing in DOM)');
+    expect(hljs, greaterThan(0), reason: 'Code not highlighted (hljs missing in DOM). Status: "$text"');
+    expect(katex, greaterThan(0), reason: 'KaTeX math not rendered (.katex missing in DOM). Status: "$text"');
     expect(
       mermaid,
       greaterThan(0),
-      reason: 'Mermaid did not render to <svg> — the lazy worker import under '
-          'file:// likely failed on this platform (the Phase 0b 生死 risk)',
+      reason: 'Mermaid did not render to <svg> — lazy worker import likely '
+          'failed on this platform. Status: "$text"',
     );
   });
 }
