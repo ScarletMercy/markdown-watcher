@@ -18,19 +18,28 @@ name: Verify Rendering
 
 on:
   push:
-    branches: [ main, 'phase-0b**' ]
+    branches: [ main ]
   pull_request:
   workflow_dispatch:
+
+# Cancel superseded runs on the same ref (each run boots 2 emulators — expensive).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Read-only — this workflow verifies, never publishes.
+permissions:
+  contents: read
 
 jobs:
   analyze-and-unit-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.29.0'
-          channel: 'stable'
+          flutter-version: '3.44.4'
           cache: true
       - name: Flutter pub get
         run: cd app && flutter pub get
@@ -42,6 +51,7 @@ jobs:
   android-render:
     needs: analyze-and-unit-test
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       # Java 17 needed for the Android gradle build. No `cache: gradle` because
@@ -58,12 +68,9 @@ jobs:
           cache-dependency-path: preview/package-lock.json
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.29.0'
-          channel: 'stable'
+          flutter-version: '3.44.4'
           cache: true
-      - name: Build preview bundle
-        run: cd preview && npm ci && npm run build
-      - name: Sync preview assets into app
+      - name: Sync preview assets into app (script builds the bundle first)
         run: bash app/scripts/sync-preview-assets.sh
       - name: Generate Android platform folders (manual scaffold has none)
         run: cd app && flutter create --platforms=android --project-name=markdown_watcher .
@@ -80,6 +87,7 @@ jobs:
   ios-render:
     needs: analyze-and-unit-test
     runs-on: macos-14
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -89,12 +97,9 @@ jobs:
           cache-dependency-path: preview/package-lock.json
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.29.0'
-          channel: 'stable'
+          flutter-version: '3.44.4'
           cache: true
-      - name: Build preview bundle
-        run: cd preview && npm ci && npm run build
-      - name: Sync preview assets into app
+      - name: Sync preview assets into app (script builds the bundle first)
         run: bash app/scripts/sync-preview-assets.sh
       - name: Generate iOS platform folders (manual scaffold has none)
         run: cd app && flutter create --platforms=ios --project-name=markdown_watcher .
