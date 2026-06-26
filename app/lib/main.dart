@@ -62,8 +62,16 @@ class _ProbePageState extends State<ProbePage> {
   @override
   void initState() {
     super.initState();
-    _server.start().then((_) {
+    // Timeout + catchError so a server-start failure (e.g. missing INTERNET
+    // permission in release) surfaces on-device instead of hanging forever.
+    _server
+        .start()
+        .timeout(const Duration(seconds: 10))
+        .then((_) {
       if (mounted) setState(() => _serverReady = true);
+    }).catchError((e) {
+      debugPrint('[probe] server start failed: $e');
+      if (mounted) setState(() => _status = 'SERVER-ERROR: $e');
     });
   }
 
