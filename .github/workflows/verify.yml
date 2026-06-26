@@ -19,6 +19,8 @@ name: Verify Rendering
 on:
   push:
     branches: [ main ]
+    tags:
+      - 'v*'
   pull_request:
   workflow_dispatch:
 
@@ -52,6 +54,8 @@ jobs:
     needs: analyze-and-unit-test
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: write   # for softprops/action-gh-release on v* tags
     steps:
       - uses: actions/checkout@v4
       # Java 17 needed for the Android gradle build. No `cache: gradle` because
@@ -121,4 +125,17 @@ jobs:
         with:
           name: markdown-watcher-debug-apk
           path: app/build/app/outputs/flutter-apk/app-debug.apk
+      # Release APK for real devices: arm64 + AOT-optimized (~15MB, vs ~70MB
+      # debug fat). Published to GitHub Releases when a v* tag is pushed.
+      # Uses the debug keystore fallback (debug-signed release-mode APK —
+      # installable for sideloading, not for Play Store).
+      - name: Build release APK (arm64)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: cd app && flutter build apk --release --target-platform android-arm64
+      - name: Publish release APK to GitHub Releases
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/app/outputs/flutter-apk/app-release.apk
+          generate_release_notes: true
 
