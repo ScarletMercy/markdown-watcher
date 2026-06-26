@@ -70,8 +70,10 @@ jobs:
         with:
           flutter-version: '3.44.4'
           cache: true
-      - name: Sync preview assets into app (script builds the bundle first)
-        run: bash app/scripts/sync-preview-assets.sh
+      - name: Install preview deps + sync assets into app
+        run: |
+          cd preview && npm ci
+          bash ../app/scripts/sync-preview-assets.sh
       - name: Generate Android platform folders (manual scaffold has none)
         run: cd app && flutter create --platforms=android --project-name=markdown_watcher .
       - name: Flutter pub get
@@ -81,6 +83,7 @@ jobs:
         with:
           api-level: 33
           arch: x86_64
+          target: google_apis
           emulator-boot-timeout: 1200
           script: cd $GITHUB_WORKSPACE/app && flutter test integration_test/render_probe_test.dart
 
@@ -99,30 +102,24 @@ jobs:
         with:
           flutter-version: '3.44.4'
           cache: true
-      - name: Sync preview assets into app (script builds the bundle first)
-        run: bash app/scripts/sync-preview-assets.sh
+      - name: Install preview deps + sync assets into app
+        run: |
+          cd preview && npm ci
+          bash ../app/scripts/sync-preview-assets.sh
       - name: Generate iOS platform folders (manual scaffold has none)
         run: cd app && flutter create --platforms=ios --project-name=markdown_watcher .
       - name: Flutter pub get
         run: cd app && flutter pub get
-      # flutter_inappwebview is a heavy native plugin; pre-run pod install with
-      # a repo-update fallback to avoid first-install flakes. Guarded so it
-      # doesn't hard-fail if the Podfile isn't present yet (flutter test will
-      # then generate it).
-      - name: Pod install (native iOS deps)
-        run: |
-          if [ -f app/ios/Podfile ]; then
-            cd app/ios && (pod install || pod install --repo-update)
-          else
-            echo "No Podfile yet; flutter test will generate it."
-          fi
       # Resolve a UDID deterministically — multiple "iPhone 15" sims exist across
       # runtimes on macos-14 and `flutter test -d <name>` matching is unreliable.
+      # flutter test generates the Podfile + runs pod install during its build,
+      # so no separate pod step is needed here.
       - name: Boot iOS simulator (resolve UDID deterministically)
         run: |
-          UDID=$(xcrun simctl list devices available -j | python3 -c "import sys,json; d=json.load(sys.stdin); print(next(dv['udid'] for rt in d['devices'].values() for dv in rt if dv['name']=='iPhone 15' and dv['isAvailable']))")
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import sys,json; d=json.load(sys.stdin); print(next((dv['udid'] for rt in d['devices'].values() for dv in rt if dv['name']=='iPhone 15' and dv['isAvailable']), ''))")
+          [ -n "$UDID" ] || { echo "No available iPhone 15 simulator on this runner image"; exit 1; }
           echo "Resolved UDID=$UDID"
-          xcrun simctl boot "$UDID"
+          xcrun simctl boot "$UDID" 2>/dev/null || true   # tolerate "Already Booted" on macos-14
           xcrun simctl bootstatus "$UDID"
           echo "UDID=$UDID" >> "$GITHUB_ENV"
       - name: Run integration_test on iOS simulator (the 生死 gate)
