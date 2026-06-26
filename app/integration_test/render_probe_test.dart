@@ -31,10 +31,15 @@ void main() {
       text = widget is Text ? (widget.data ?? '') : '';
     }
 
+    // Dump the final status (and the probe's diagnostic trail is already
+    // debugPrint'd by the probe) so the CI log shows exactly what happened
+    // even if GitHub Actions collapses the assertion detail.
+    debugPrint('[test] FINAL STATUS: "$text"');
+
     expect(
       text,
       startsWith('RENDER_DONE'),
-      reason: 'WebView never signaled render-done — template/bundle failed to load or __render__ threw',
+      reason: 'WebView never signaled render-done (status was: "$text")',
     );
 
     final mermaid = int.parse(RegExp(r'mermaidSvg=(\d+)').firstMatch(text)!.group(1)!);
