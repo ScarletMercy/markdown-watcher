@@ -49,13 +49,6 @@ jobs:
         run: cd app && flutter test
 
   android-render:
-    # DISABLED: flutter_inappwebview 6.1.5 (the maintenance-stale plugin) is
-    # incompatible with Flutter 3.44's Android Gradle Plugin — its own
-    # build.gradle uses getDefaultProguardFile('proguard-android.txt'), which
-    # new AGP rejects. This is an ecosystem issue, not our code, and Android is
-    # NOT the 生死 gate (iOS is). Re-enable once the plugin ships a fix or we
-    # pin older Android tooling. The KVM step below is correct and kept for then.
-    if: false
     needs: analyze-and-unit-test
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -85,6 +78,15 @@ jobs:
         run: cd app && flutter create --platforms=android --project-name=markdown_watcher .
       - name: Flutter pub get
         run: cd app && flutter pub get
+      # flutter_inappwebview 6.1.5's build.gradle references the legacy
+      # proguard-android.txt, which Flutter 3.44's new AGP rejects at project
+      # evaluation. Patch the plugin in pub-cache to use the supported file.
+      # Stale-plugin workaround (CI-only; doesn't touch source). Debug builds
+      # don't minify, so this only satisfies evaluation, no runtime effect.
+      - name: Patch stale flutter_inappwebview proguard ref
+        run: |
+          find ~/.pub-cache -path "*flutter_inappwebview_android*/android/build.gradle" \
+            -exec sed -i "s/getDefaultProguardFile('proguard-android.txt')/getDefaultProguardFile('proguard-android-optimize.txt')/g" {} \;
       # Grant KVM access — without it the emulator falls back to software
       # emulation and never boots (x86_64 too slow). Standard fix for
       # reactivecircus/android-emulator-runner on ubuntu runners.
