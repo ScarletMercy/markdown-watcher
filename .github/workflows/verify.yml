@@ -1,0 +1,105 @@
+# .github/workflows/verify.yml
+#
+# Phase 0b rendering verification — runs on every push/PR.
+#
+# Three jobs:
+#   1. analyze-and-unit-test (ubuntu) — Dart analyze + the pure-Dart bridge
+#      injection-safety unit test (no device needed).
+#   2. android-render (ubuntu) — builds the app, runs integration_test on an
+#      Android emulator; asserts code/KaTeX/Mermaid render in the WebView.
+#   3. ios-render (macos-14) — the 生死 job: runs integration_test on an iOS
+#      simulator, which probes Mermaid's dynamic worker import under file://
+#      (the #1 risk flagged in the design + Phase 0b runbook).
+#
+# Patterned after Agolid/LocationHook/.github/workflows/build.yml
+# (subosito/flutter-action, setup-java, analyze, build), extended with iOS +
+# integration_test.
+name: Verify Rendering
+
+on:
+  push:
+    branches: [ main, 'phase-0b**' ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  analyze-and-unit-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.1'
+          channel: 'stable'
+          cache: true
+      - name: Flutter pub get
+        run: cd app && flutter pub get
+      - name: Analyze
+        run: cd app && flutter analyze --no-fatal-infos
+      - name: Unit tests (pure-Dart bridge injection-safety)
+        run: cd app && flutter test
+
+  android-render:
+    needs: analyze-and-unit-test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: preview/package-lock.json
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.1'
+          channel: 'stable'
+          cache: true
+      - name: Build preview bundle
+        run: cd preview && npm ci && npm run build
+      - name: Sync preview assets into app
+        run: bash app/scripts/sync-preview-assets.sh
+      - name: Generate Android platform folders (manual scaffold has none)
+        run: cd app && flutter create --platforms=android --project-name=markdown_watcher .
+      - name: Flutter pub get
+        run: cd app && flutter pub get
+      - name: Run integration_test on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          arch: x86_64
+          script: cd $GITHUB_WORKSPACE/app && flutter test integration_test/render_probe_test.dart
+
+  ios-render:
+    needs: analyze-and-unit-test
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: preview/package-lock.json
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.1'
+          channel: 'stable'
+          cache: true
+      - name: Build preview bundle
+        run: cd preview && npm ci && npm run build
+      - name: Sync preview assets into app
+        run: bash app/scripts/sync-preview-assets.sh
+      - name: Generate iOS platform folders (manual scaffold has none)
+        run: cd app && flutter create --platforms=ios --project-name=markdown_watcher .
+      - name: Flutter pub get
+        run: cd app && flutter pub get
+      - name: Boot iOS simulator
+        run: |
+          xcrun simctl boot "iPhone 15" || true
+          xcrun simctl bootstatus "iPhone 15" || true
+      - name: Run integration_test on iOS simulator (the 生死 gate)
+        run: cd app && flutter test integration_test/render_probe_test.dart -d "iPhone 15"
