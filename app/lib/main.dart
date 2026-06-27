@@ -1,7 +1,91 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'debouncer.dart';
+import 'editor_screen.dart';
+import 'editor_state.dart';
+import 'saf_file_repository.dart';
 import 'webview_bridge.dart';
+
+/// Production entry point.
+///
+/// Runs [MarkdownNotesApp] under a [ProviderScope] that overrides
+/// [fileRepositoryProvider] with a real [SafFileRepository] (the override seam
+/// declared in editor_state.dart). Tests that need a fake repository construct
+/// their own ProviderScope; see the editor-state / repository unit tests.
+void main() => runApp(
+      ProviderScope(
+        overrides: [
+          fileRepositoryProvider.overrideWithValue(SafFileRepository()),
+        ],
+        child: const MarkdownNotesApp(),
+      ),
+    );
+
+/// Production root widget.
+///
+/// Hosts the [MaterialApp] over [EditorScreen] AND owns the **app-level
+/// autosave listener**. The listener is deliberately placed here — above
+/// [EditorScreen] — rather than inside EditorScreen: rotating the device
+/// rebuilds the EditorScreen layout subtree (tabs ↔ split), and a listener
+/// living there could be torn down mid-debounce and drop a save. At this level
+/// the listener survives layout rebuilds for the lifetime of the app.
+///
+/// The listener watches [editorProvider] (whole state, since the guard needs
+/// both `dirty` and `file`), debounces ~1.5s (longer than the preview's 400ms
+/// — saving on every keystroke would thrash app-private storage and the SAF
+/// conflict probe), and calls [SafFileRepository.write] only when
+/// `state.dirty && state.file != null`. [SafFileRepository.write] is
+/// best-effort and never throws, so the listener has no try/catch of its own.
+class MarkdownNotesApp extends ConsumerStatefulWidget {
+  const MarkdownNotesApp({super.key});
+
+  @override
+  ConsumerState<MarkdownNotesApp> createState() => _MarkdownNotesAppState();
+}
+
+class _MarkdownNotesAppState extends ConsumerState<MarkdownNotesApp> {
+  /// Autosave debounce. 1.5s balances "don't lose more than a couple seconds
+  /// of typing on a crash" against "don't write on every keystroke". Distinct
+  /// from the preview's 400ms — preview lag is cheap to tolerate, disk/SAF IO
+  /// is not.
+  final _autosave = Debouncer(const Duration(milliseconds: 1500));
+
+  @override
+  void dispose() {
+    _autosave.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // ref.listen (not ref.watch) so this widget does not rebuild on every
+    // keystroke — only the debounced side-effect runs. fireImmediately: false
+    // (default) means the initial empty EditorState does not trigger a save.
+    ref.listen<EditorState>(editorProvider, (prev, next) {
+      if (!next.dirty || next.file == null) return;
+      final file = next.file!;
+      final text = next.text;
+      _autosave.run(() {
+        // Read the repository lazily inside the debounced callback: cheap, and
+        // keeps the closure valid even if the override were hot-reloaded.
+        ref.read(fileRepositoryProvider).write(file.uri, text);
+      });
+    });
+    return MaterialApp(home: const EditorScreen());
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 0b probe — RETAINED AS A TEST FIXTURE, NOT run by main().
+//
+// `integration_test/render_probe_test.dart` does `pumpWidget(const MyApp())`
+// and polls the `Key('status')` line for RENDER_DONE. That test is the Phase 0b
+// 生死 gate and runs on the Android emulator in CI. Deleting MyApp/ProbePage
+// would break it, so both are kept verbatim below. main() now runs the real
+// editor (MarkdownNotesApp, above); MyApp is reached only via the test.
+// ─────────────────────────────────────────────────────────────────────────────
 
 /// Hardcoded Phase 0b probe sample: exercises bold, inline code, a ```js fence,
 /// inline math `$E=mc^2$`, block math `$$...$$`, and a ```mermaid fence.
@@ -23,8 +107,9 @@ graph TD; A-->B
 ```
 ''';
 
-void main() => runApp(const MyApp());
-
+/// Phase 0b probe entry — kept ONLY so `render_probe_test.dart`'s
+/// `pumpWidget(const MyApp())` still compiles and renders ProbePage unchanged.
+/// Production uses [MarkdownNotesApp] (see [main]).
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
   @override

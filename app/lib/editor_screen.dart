@@ -15,14 +15,17 @@
 //    redundant read with no benefit (YAGNI).
 //
 // Out of scope (later tasks):
-//  - "Open file" AppBar action + ProviderScope wiring      → Task 9 (main.dart)
-//  - Autosave listener                                       → Task 9
+//  - Autosave listener                                       → Task 9 (main.dart, app-level)
 //  - Bidirectional scroll-sync                              → Phase 1b
 //
-// The AppBar is built here so Task 9 only needs to drop an `actions:` list in.
+// The AppBar's "Open" and "Export" actions (Task 9) live at the bottom of this
+// file; ProviderScope wiring + the autosave listener live in main.dart's
+// MarkdownNotesApp.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'editor_state.dart';
 import 'editor_widget.dart';
 import 'preview_widget.dart';
 
@@ -67,13 +70,26 @@ class _EditorScreenState extends State<EditorScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isSplit = constraints.maxWidth >= _kSplitBreakpoint;
-        // Keep an AppBar at the top in both layouts. Task 9 adds the "Open"
-        // action here; bottom-flags are reserved so the layout doesn't shift.
+        // Keep an AppBar at the top in both layouts. The "Open"/"Export"
+        // actions (Task 9) live in this AppBar — see [_OpenAction] /
+        // [_ExportAction] at the bottom of the file.
         return Scaffold(
           appBar: AppBar(
             title: const Text(_kTitle),
             // `automaticallyImplyLeading` stays true so a future Navigator
             // back button works once the screen is hosted in a stack.
+            //
+            // The actions read/write providers, but EditorScreen itself is a
+            // plain StatefulWidget (it doesn't otherwise need provider access).
+            // Wrapping just the `actions` list in a [Consumer] is the lightest
+            // way to obtain a `WidgetRef` here without converting the whole
+            // screen to a ConsumerWidget — which would rebuild it on every
+            // editorProvider change for no benefit (the editor/preview widgets
+            // already watch the provider themselves).
+            actions: const [
+              _OpenAction(),
+              _ExportAction(),
+            ],
           ),
           body: isSplit
               ? _SplitBody(
@@ -209,5 +225,89 @@ class _DragHandle extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AppBar actions (Task 9).
+//
+// These are StatelessWidget wrappers that lazily obtain a WidgetRef via a
+// [Consumer] in build(), so the actions list can stay `const` and EditorScreen
+// stays a plain StatefulWidget. Each action does a one-shot ref.read (or a
+// short await) — none of them subscribe, so no rebuild concern.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// "Open" action: launches the SAF picker, reads the chosen file, and loads it
+/// into [editorProvider]. [EditorWidget] reflects the new text via its own
+/// `ref.listen` (Task 6), so no further wiring is needed here.
+///
+/// Cancellation (user backs out of the picker) returns null and is a no-op.
+/// pickAndRead failures are surfaced via a [SnackBar] rather than thrown — the
+/// repository itself never throws, but file_picker / SAF can still reject
+/// (e.g. permission denied).
+class _OpenAction extends StatelessWidget {
+  const _OpenAction();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer(
+      builder: (context, ref, _) => IconButton(
+        icon: const Icon(Icons.folder_open),
+        tooltip: 'Open',
+        onPressed: () => _pickAndLoad(context, ref),
+      ),
+    );
+  }
+
+  Future<void> _pickAndLoad(BuildContext context, WidgetRef ref) async {
+    final repo = ref.read(fileRepositoryProvider);
+    final scaffold = ScaffoldMessenger.maybeOf(context);
+    try {
+      final file = await repo.pickAndRead();
+      if (file == null) return; // user cancelled
+      ref.read(editorProvider.notifier).loadFile(file);
+    } catch (e) {
+      // Defensive: the repository is best-effort, but a platform error here
+      // (e.g. picker unavailable) should not crash the app.
+      scaffold?.showSnackBar(SnackBar(content: Text('打开失败: $e')));
+    }
+  }
+}
+
+/// "Export" action: writes the current buffer to a real file in a user-chosen
+/// directory via [FileRepository.saveAs]. This is the ONLY path that writes a
+/// real file (autosave only mirrors to app-private storage — see
+/// SafFileRepository). The suggested name falls back to 'note.md' when no file
+/// is open yet. Best-effort: shows a SnackBar with the outcome.
+class _ExportAction extends StatelessWidget {
+  const _ExportAction();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer(
+      builder: (context, ref, _) => IconButton(
+        icon: const Icon(Icons.ios_share),
+        tooltip: 'Export',
+        onPressed: () => _export(context, ref),
+      ),
+    );
+  }
+
+  Future<void> _export(BuildContext context, WidgetRef ref) async {
+    final state = ref.read(editorProvider);
+    final repo = ref.read(fileRepositoryProvider);
+    final scaffold = ScaffoldMessenger.maybeOf(context);
+    // Allow exporting an empty buffer (the user may have cleared it on
+    // purpose). Fall back to a generic name when nothing is open.
+    final name = state.file?.name.isNotEmpty == true
+        ? state.file!.name
+        : 'note.md';
+    try {
+      final saved = await repo.saveAs(name, state.text);
+      if (saved == null) return; // user cancelled the directory picker
+      scaffold?.showSnackBar(SnackBar(content: Text('已导出: ${saved.name}')));
+    } catch (e) {
+      scaffold?.showSnackBar(SnackBar(content: Text('导出失败: $e')));
+    }
   }
 }
