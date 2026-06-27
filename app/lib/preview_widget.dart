@@ -23,11 +23,18 @@ import 'webview_bridge.dart';
 /// Renders the editor's markdown into a WebView, debouncing rapid edits.
 ///
 /// The [InAppLocalhostServer] is a singleton: a `static final` instance is
-/// started once. **We deliberately do NOT close it in [dispose]** — closing a
-/// shared singleton from one widget's teardown would break any other widget
-/// (or a future remount) still relying on it, and InAppLocalhostServer is not
-/// idempotently restartable. [start] is itself guarded by the server's own
-/// internal state and is safe to call again.
+/// started **at most once** across the app lifetime (gated by
+/// [_serverStarted]). **We deliberately do NOT close it in [dispose]** —
+/// closing a shared singleton from one widget's teardown would break any other
+/// consumer, and InAppLocalhostServer is not idempotently restartable.
+///
+/// NOTE: `start()` is also NOT idempotent — calling it on an already-running
+/// server throws "Server already started". So [initState] must not re-invoke
+/// it when this widget rebuilds. Two defenses:
+///   1. [AutomaticKeepAliveClientMixin] keeps this widget alive across
+///      TabBarView tab switches, so initState normally runs only once.
+///   2. [_serverStarted] (static) gates start() as a belt-and-suspenders guard
+///      in case the widget is ever rebuilt (memory pressure, etc.).
 class PreviewWidget extends ConsumerStatefulWidget {
   const PreviewWidget({super.key});
 
@@ -35,9 +42,13 @@ class PreviewWidget extends ConsumerStatefulWidget {
   ConsumerState<PreviewWidget> createState() => _PreviewWidgetState();
 }
 
-class _PreviewWidgetState extends ConsumerState<PreviewWidget> {
+class _PreviewWidgetState extends ConsumerState<PreviewWidget>
+    with AutomaticKeepAliveClientMixin {
   // Singleton server — shared across the app lifetime (see class docs).
   static final _server = InAppLocalhostServer(documentRoot: 'assets/preview');
+  // start() throws "Server already started" on a second call, so gate it.
+  // Static so it survives widget rebuilds.
+  static bool _serverStarted = false;
 
   WebViewBridge? _bridge;
   bool _serverReady = false;
@@ -47,16 +58,40 @@ class _PreviewWidgetState extends ConsumerState<PreviewWidget> {
   final _debouncer = Debouncer(const Duration(milliseconds: 400));
 
   @override
+  bool get wantKeepAlive => true;
+
+  @override
   void initState() {
     super.initState();
-    // Timeout + catchError so a server-start failure (e.g. missing INTERNET
-    // permission in release) surfaces instead of hanging. Mirrors the probe.
-    _server.start().timeout(const Duration(seconds: 10)).then((_) {
+    _ensureServerStarted();
+  }
+
+  /// Start the singleton server at most once. On rebuild (e.g. returning to
+  /// the preview tab), the server is already running — mark ready instead of
+  /// calling start() again (which would throw "Server already started").
+  void _ensureServerStarted() {
+    if (_serverStarted) {
       if (mounted) setState(() => _serverReady = true);
-    }).catchError((Object e) {
-      debugPrint('[preview] server start failed: $e');
-      if (mounted) setState(() => _error = 'Server error: $e');
-    });
+      return;
+    }
+    _server
+        .start()
+        .timeout(const Duration(seconds: 10))
+        .then((_) {
+          _serverStarted = true;
+          if (mounted) setState(() => _serverReady = true);
+        })
+        .catchError((Object e) {
+          // Race guard: a second instance racing past the flag before the first
+          // resolved hits "already started" — treat as success (server is up).
+          if ('$e'.contains('already started')) {
+            _serverStarted = true;
+            if (mounted) setState(() => _serverReady = true);
+            return;
+          }
+          debugPrint('[preview] server start failed: $e');
+          if (mounted) setState(() => _error = 'Server error: $e');
+        });
   }
 
   @override
@@ -70,9 +105,8 @@ class _PreviewWidgetState extends ConsumerState<PreviewWidget> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // AutomaticKeepAliveClientMixin.
     // Watch editor text; debounce a re-render whenever it changes.
-    // ref.listen fires on every change (incl. the first build) without
-    // returning a value into the widget tree.
     ref.listen<String>(editorProvider.select((s) => s.text), (previous, next) {
       _scheduleRender(next);
     });
