@@ -16,6 +16,16 @@ abstract class FileRepository {
   /// The real impl uses SAF `openOutputStream("wt")` + a `.bak` recovery copy
   /// + an mtime/size conflict check (Task 7); the fake just records the bytes.
   Future<void> write(Uri uri, String content);
+
+  /// Export/save-as: prompt for a directory and write [content] there as
+  /// [suggestedName]. Returns the newly-written file, or null if the user
+  /// cancelled the directory picker.
+  ///
+  /// This is the export path (distinct from [write], which is the best-effort
+  /// autosave mirror): the real impl uses saf_util.pickDirectory to obtain a
+  /// treeUri with persistable write permission, then saf_stream.writeFileBytes
+  /// to create/overwrite the file in that tree.
+  Future<MarkdownFile?> saveAs(String suggestedName, String content);
 }
 
 /// A markdown document loaded from (or to be written to) a file.
@@ -57,5 +67,15 @@ class InMemoryFileRepository implements FileRepository {
   @override
   Future<void> write(Uri uri, String content) async {
     store[uri.path] = content;
+  }
+
+  @override
+  Future<MarkdownFile?> saveAs(String suggestedName, String content) async {
+    if (cancel) return null;
+    // The fake models a successful export: record the content under an
+    // export:// URI keyed by the suggested name and return it as a MarkdownFile.
+    final uri = Uri.parse('export:///$suggestedName');
+    store[uri.toString()] = content;
+    return MarkdownFile(uri: uri, name: suggestedName, content: content);
   }
 }

@@ -19,15 +19,31 @@
 //     (ACTION_OPEN_DOCUMENT), not a treeUri, so a clean in-place SAF write-back
 //     to the picked file is not expressible with this plugin's API surface.
 //     Per the Task 7 risk note we therefore implement the documented FALLBACK:
-//     write to app-private storage + keep a .bak, and leave a TODO for a future
-//     "export / save-as" flow that uses saf_util.pickDirectory (which *does*
-//     return a treeUri with persistable write permission) to write back into
-//     the user's chosen tree.
+//     write to app-private storage + keep a .bak. The save-as/export path
+//     ([saveAs]) DOES write a real file: it uses saf_util.pickDirectory (which
+//     returns a treeUri with persistable write permission) and
+//     saf_stream.writeFileBytes(treeUri, fileName, mime, bytes, overwrite).
+//
+// saveAs API verified via context7 + the published 3.x archives on 2026-06-27:
+//   - saf_util 3.1.0:
+//       Future<SafDocumentFile?> pickDirectory({
+//         String? initialUri,
+//         bool? writePermission,
+//         bool? persistablePermission,
+//       })
+//     SafDocumentFile.uri is a **String** treeUri (NOT a Uri).
+//   - saf_stream 3.0.0:
+//       Future<SafNewFile> writeFileBytes(
+//         String treeUri, String fileName, String mime, Uint8List data,
+//         {bool? overwrite, bool? append})
+//     SafNewFile.uri is a **Uri**; SafNewFile.fileName is **String?**.
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:saf_stream/saf_stream.dart';
 import 'package:saf_util/saf_util.dart';
 
 import 'file_repository.dart';
@@ -45,9 +61,12 @@ import 'file_repository.dart';
 /// keyed by the document URI. It never throws — failures are logged via
 /// debugPrint so the editor stays responsive.
 class SafFileRepository implements FileRepository {
-  SafFileRepository({SafUtil? safUtil}) : _saf = safUtil ?? SafUtil();
+  SafFileRepository({SafUtil? safUtil, SafStream? safStream})
+      : _saf = safUtil ?? SafUtil(),
+        _safStream = safStream ?? SafStream();
 
   final SafUtil _saf;
+  final SafStream _safStream;
 
   @override
   Future<MarkdownFile?> pickAndRead() async {
@@ -78,6 +97,50 @@ class SafFileRepository implements FileRepository {
     if (f.bytes != null) return String.fromCharCodes(f.bytes!);
     if (f.path != null) return await File(f.path!).readAsString();
     return '';
+  }
+
+  @override
+  Future<MarkdownFile?> saveAs(String suggestedName, String content) async {
+    // Export/save-as: this is the path that writes a REAL file into the user's
+    // chosen tree (unlike write(), which only mirrors to app-private storage).
+    // Best-effort: never throw to the editor.
+    try {
+      // pickDirectory returns the tree as a SafDocumentFile whose .uri is the
+      // treeUri String. writePermission + persistablePermission let us write
+      // now AND keep the grant across restarts. Null => user cancelled.
+      final tree = await _saf.pickDirectory(
+        writePermission: true,
+        persistablePermission: true,
+      );
+      if (tree == null) return null;
+
+      final treeUri = tree.uri; // String treeUri.
+      final bytes = Uint8List.fromList(utf8.encode(content));
+      // overwrite: true so re-exporting the same name replaces the prior file
+      // instead of the plugin minting a "name (1).md" sibling.
+      final result = await _safStream.writeFileBytes(
+        treeUri,
+        suggestedName,
+        'text/markdown',
+        bytes,
+        overwrite: true,
+      );
+
+      // result.uri is the new document's URI; fileName may be null/different
+      // when overwrite was false, but we pass overwrite: true so the plugin
+      // should honor suggestedName. Prefer the plugin's returned fileName when
+      // present, else fall back to the suggested name.
+      final name = result.fileName ?? suggestedName;
+      return MarkdownFile(
+        uri: result.uri,
+        name: name,
+        content: content,
+      );
+    } catch (e, st) {
+      debugPrint('[SafFileRepository] saveAs failed (best-effort, swallowed): '
+          '$e\n$st');
+      return null;
+    }
   }
 
   @override

@@ -26,4 +26,23 @@ void main() {
     final repo = InMemoryFileRepository({}, cancel: true);
     expect(await repo.pickAndRead(), isNull);
   });
+
+  // Phase 1a Task 7 (save-as/export) — the export contract for the fake.
+  group('saveAs', () {
+    test('writes content and returns the file', () async {
+      final repo = InMemoryFileRepository({});
+      final file = await repo.saveAs('exported.md', '# Exported');
+      expect(file, isNotNull);
+      expect(file!.name, 'exported.md');
+      expect(file.content, '# Exported');
+      // The content is recorded under an export:// URI so callers/tests can
+      // assert round-trips against the same store used by write().
+      expect(repo.store[file.uri.toString()], '# Exported');
+    });
+
+    test('returns null when user cancels', () async {
+      final repo = InMemoryFileRepository({}, cancel: true);
+      expect(await repo.saveAs('exported.md', 'x'), isNull);
+    });
+  });
 }
