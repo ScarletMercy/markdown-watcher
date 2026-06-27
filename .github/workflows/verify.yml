@@ -91,6 +91,18 @@ jobs:
         run: |
           find ~/.pub-cache -path "*flutter_inappwebview_android*/android/build.gradle" \
             -exec sed -i "s/getDefaultProguardFile('proguard-android.txt')/getDefaultProguardFile('proguard-android-optimize.txt')/g" {} \;
+      # file_picker 11.0.2's android/build.gradle skips applying the Kotlin
+      # Gradle plugin on AGP>=9 (it expects Flutter's built-in Kotlin). But CI's
+      # gradle.properties pins android.builtInKotlin=false (Flutter migrator
+      # added it for plugin compatibility), so file_picker's Kotlin sources never
+      # compile -> GeneratedPluginRegistrant can't resolve FilePickerPlugin ->
+      # ':app:compileDebugJavaWithJavac' fails. Force file_picker to apply KGP
+      # regardless of AGP version. Safe: scoped to file_picker; does NOT touch
+      # flutter_inappwebview or the global builtInKotlin=false flag.
+      - name: Force file_picker Kotlin plugin (AGP9 + builtInKotlin=false)
+        run: |
+          find ~/.pub-cache -path "*file_picker-*/android/build.gradle" \
+            -exec sed -i "s/if (!isAgp9OrAbove)/if (true)/g" {} \;
       # Configure the generated AndroidManifest for InAppLocalhostServer:
       #  - INTERNET: HttpServer.bind + WebView fetching http://localhost need it;
       #    flutter create only adds it to debug/profile manifests, so release
